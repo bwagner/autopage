@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 from pypdf import PdfReader
+from reportlab.pdfbase.pdfmetrics import stringWidth
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import autopage
@@ -53,6 +54,82 @@ def test_multipage_when_too_many_lines(tmp_path):
     result = autopage.fit_text(str(src), str(out), min_size=10)
     assert result.pages > 1
     assert result.lines == 500
+
+
+# --- _max_font_size_by_width ---
+
+
+def test_max_font_size_empty_lines_returns_cap():
+    # No lines means no width constraint — should hit max_size or default cap.
+    assert autopage.FONT_SIZE_SEARCH_MAX == autopage._max_font_size_by_width(
+        [], "Courier", usable_width=1000, max_size=None
+    )
+    assert autopage._max_font_size_by_width([], "Courier", 1000, max_size=42) == 42
+
+
+def test_max_font_size_saturates_at_width():
+    # Binary-search invariant: result fits, result+1 does not.
+    lines = ["abcdefghijklmnopqrstuvwxyz"]
+    uw = 200.0
+    size = autopage._max_font_size_by_width(lines, "Courier", uw, max_size=None)
+    assert stringWidth(lines[0], "Courier", size) <= uw
+    assert stringWidth(lines[0], "Courier", size + 1) > uw
+
+
+def test_max_font_size_monotonic_in_width():
+    # Wider page → size at least as large.
+    lines = ["some monospace text goes here"]
+    narrow = autopage._max_font_size_by_width(lines, "Courier", 100.0, max_size=None)
+    wide = autopage._max_font_size_by_width(lines, "Courier", 400.0, max_size=None)
+    assert wide >= narrow
+
+
+def test_max_font_size_honors_max_size_cap():
+    # Even on an infinitely wide page, result must not exceed max_size.
+    size = autopage._max_font_size_by_width(["x"], "Courier", 10_000.0, max_size=14)
+    assert size == 14
+
+
+# --- _paginate ---
+
+
+def test_paginate_single_page_when_height_fits():
+    lines = ["a", "b", "c"]
+    size, pages = _paginate_unpack(lines, width_size=20, usable_height=1000, min_size=10)
+    assert len(pages) == 1
+    assert pages[0] == lines
+    assert size >= 10
+
+
+def test_paginate_multipage_when_single_page_font_below_min():
+    # Tight height + many lines → single-page size < min_size → spill.
+    n = 100
+    lines = [f"line {i}" for i in range(n)]
+    size, pages = _paginate_unpack(lines, width_size=30, usable_height=200, min_size=12)
+    assert len(pages) > 1
+    assert size >= 12
+    assert sum(len(p) for p in pages) == n
+
+
+def test_paginate_preserves_line_order_and_count():
+    lines = [f"line {i}" for i in range(10)]
+    _, pages = _paginate_unpack(lines, width_size=20, usable_height=50, min_size=15)
+    flat = [ln for page in pages for ln in page]
+    assert flat == lines
+
+
+def test_paginate_even_distribution():
+    # 10 lines across forced 3 pages → 4,3,3 (first page gets the extra).
+    lines = [f"l{i}" for i in range(10)]
+    # width_size=15, uh=30, min_size=15 → size=15, max_lpp=30/15=2, N=ceil(10/2)=5.
+    # Force a known split by picking numbers: want 10 lines split across 3 pages.
+    # max_lpp must be 4 → uh/size = 4 → with size=15, uh=60.
+    _, pages = _paginate_unpack(lines, width_size=15, usable_height=60, min_size=15)
+    assert [len(p) for p in pages] == [4, 3, 3]
+
+
+def _paginate_unpack(lines, width_size, usable_height, min_size):
+    return autopage._paginate(lines, width_size, usable_height, min_size)
 
 
 if __name__ == "__main__":
