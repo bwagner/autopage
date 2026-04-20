@@ -51,8 +51,8 @@ def test_multipage_when_too_many_lines(tmp_path):
     src.write_text("\n".join(f"line {i}" for i in range(500)), encoding="utf-8")
     out = tmp_path / "out.pdf"
     result = autopage.fit_text(str(src), str(out), min_size=10)
-    assert result["pages"] > 1
-    assert result["lines"] == 500
+    assert result.pages > 1
+    assert result.lines == 500
 
 
 if __name__ == "__main__":

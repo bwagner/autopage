@@ -18,18 +18,22 @@ Useful flags:
   --paper A4|LETTER         (default: A4)
   --landscape               (make it landscape)
   --margins 36,36,36,36     (points: top,right,bottom,left; default 36=0.5")
-  --font Courier            (monospace font family)
+  --font Courier            (reportlab-registered monospace font name)
   --tabsize 8               (tab expansion width)
   --min-size 10             (minimum font size in pt; may produce >1 page)
   --max-size N              (cap font size in pt)
 """
 
+import argparse
 import math
+import os
+import sys
 import unicodedata
+from dataclasses import dataclass
 
 from reportlab.lib.pagesizes import A4, LETTER
-from reportlab.pdfgen import canvas
 from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.pdfgen import canvas
 
 PAPER = {"A4": A4, "LETTER": LETTER}
 
@@ -38,13 +42,78 @@ MAX_LEADING_FACTOR = 1.5
 FONT_SIZE_SEARCH_MAX = 500
 
 
+@dataclass(frozen=True)
+class FitResult:
+    size: int
+    lines: int
+    pages: int
+    paper: str
+    landscape: bool
+    margins: tuple
+
+
+def _load_lines(input_path, tabsize):
+    with open(input_path, encoding="utf-8") as f:
+        raw = f.read()
+    # NFC: combine decomposed marks (e.g. "a"+U+0308) into precomposed chars
+    # (ä) so Type 1 WinAnsi fonts like Courier can render them.
+    lines = unicodedata.normalize("NFC", raw).expandtabs(tabsize).splitlines()
+    return lines or [""]
+
+
+def _max_font_size_by_width(lines, font, usable_width, max_size):
+    lo, hi = 1, max_size or FONT_SIZE_SEARCH_MAX
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if max((stringWidth(ln, font, mid) for ln in lines), default=0) <= usable_width:
+            lo = mid
+        else:
+            hi = mid - 1
+    return lo
+
+
+def _paginate(lines, width_size, usable_height, min_size):
+    """Return (final font size, pages) given the width-fit size and height budget."""
+    n = len(lines)
+    size_1page = min(width_size, int(usable_height / n))
+    if size_1page >= min_size:
+        return size_1page, [lines]
+    # Multi-page mode: maximise font (width-only), distribute evenly.
+    size = max(min_size, width_size)
+    max_lpp = max(1, int(usable_height / size))
+    num_pages = math.ceil(n / max_lpp)
+    base, extra = divmod(n, num_pages)
+    pages, idx = [], 0
+    for i in range(num_pages):
+        count = base + (1 if i < extra else 0)
+        pages.append(lines[idx : idx + count])
+        idx += count
+    return size, pages
+
+
+def _render(output_path, pages, page_size, margins, font, size, usable_height, max_leading):
+    top, _right, _bottom, left = margins
+    pw, ph = page_size
+    c = canvas.Canvas(output_path, pagesize=(pw, ph))
+    for page_lines in pages:
+        # Spread lines to fill height, but cap leading to avoid absurd gaps.
+        line_height = min(usable_height / len(page_lines), size * max_leading)
+        c.setFont(font, size)
+        y = ph - top - size
+        for line in page_lines:
+            c.drawString(left, y, line)
+            y -= line_height
+        c.showPage()
+    c.save()
+
+
 def fit_text(
     input_path,
     output_path,
     paper="A4",
     landscape=False,
     margins=(36, 36, 36, 36),
-    font="Courier",
+    font="Courier",  # reportlab-registered font name, not a file path
     tabsize=8,
     min_size=10,
     max_size=None,
@@ -56,73 +125,29 @@ def fit_text(
         pw, ph = ph, pw
     uw, uh = pw - left - right, ph - top - bottom
 
-    with open(input_path, encoding="utf-8", errors="replace") as f:
-        raw = f.read()
-    # NFC: combine decomposed marks (e.g. "a"+U+0308) into precomposed chars
-    # (ä) so Type 1 WinAnsi fonts like Courier can render them.
-    lines = unicodedata.normalize("NFC", raw).expandtabs(tabsize).splitlines()
-    if not lines:
-        lines = [""]
-    n = len(lines)
+    lines = _load_lines(input_path, tabsize)
+    width_size = _max_font_size_by_width(lines, font, uw, max_size)
+    size, pages = _paginate(lines, width_size, uh, min_size)
+    _render(output_path, pages, (pw, ph), margins, font, size, uh, max_leading)
 
-    # Largest font fitting the page width (and optional max_size cap).
-    lo, hi = 1, max_size or FONT_SIZE_SEARCH_MAX
-    while lo < hi:
-        mid = (lo + hi + 1) // 2
-        if max((stringWidth(ln, font, mid) for ln in lines), default=0) <= uw:
-            lo = mid
-        else:
-            hi = mid - 1
-    size_w = lo
-
-    # Single-page mode: font must also fit the height slot (uh / n).
-    size_1page = min(size_w, int(uh / n))
-
-    if size_1page >= min_size:
-        # Fits comfortably on one page — spread lines to fill height.
-        size = size_1page
-        pages_lines = [lines]
-    else:
-        # Multi-page mode: maximise font (width-only), distribute evenly.
-        size = max(min_size, size_w)
-        # How many lines fit per page without glyph overlap when filling?
-        max_lpp = max(1, int(uh / size))
-        N = math.ceil(n / max_lpp)
-        # Distribute as evenly as possible (first pages get one extra line).
-        base, extra = divmod(n, N)
-        pages_lines, idx = [], 0
-        for i in range(N):
-            count = base + (1 if i < extra else 0)
-            pages_lines.append(lines[idx : idx + count])
-            idx += count
-
-    # Draw — each page's lines are spread to fill its full height,
-    # but capped at max_leading * size to avoid absurd gaps with few lines.
-    c = canvas.Canvas(output_path, pagesize=(pw, ph))
-    for page_lines in pages_lines:
-        line_height = min(uh / len(page_lines), size * max_leading)
-        c.setFont(font, size)
-        y = ph - top - size
-        for line in page_lines:
-            c.drawString(left, y, line)
-            y -= line_height
-        c.showPage()
-    c.save()
-
-    return dict(
+    return FitResult(
         size=size,
-        lines=n,
-        pages=len(pages_lines),
+        lines=len(lines),
+        pages=len(pages),
         paper=paper,
         landscape=landscape,
         margins=margins,
     )
 
 
-if __name__ == "__main__":
-    import argparse
-    import sys
+def _parse_margins(spec):
+    parts = tuple(int(x) for x in spec.split(","))
+    if len(parts) != 4:
+        raise ValueError("margins must have four comma-separated integers")
+    return parts
 
+
+def main(argv=None):
     ap = argparse.ArgumentParser(
         description="Fit text onto the fewest PDF pages at the largest readable font size."
     )
@@ -146,7 +171,7 @@ if __name__ == "__main__":
         type=int,
         default=10,
         dest="min_size",
-        help="Minimum font size in pt (default 8); may produce >1 page",
+        help="Minimum font size in pt (default 10); may produce >1 page",
     )
     ap.add_argument(
         "--max-size",
@@ -162,17 +187,13 @@ if __name__ == "__main__":
         dest="max_leading",
         help=f"Max line spacing as a multiple of font size (default {MAX_LEADING_FACTOR})",
     )
-    args = ap.parse_args()
-
-    import os
+    args = ap.parse_args(argv)
 
     output = args.output or os.path.splitext(args.input)[0] + ".pdf"
 
     try:
-        margins = tuple(int(x) for x in args.margins.split(","))
-        if len(margins) != 4:
-            raise ValueError
-    except Exception:
+        margins = _parse_margins(args.margins)
+    except ValueError:
         sys.exit("margins must be 'top,right,bottom,left' in points.")
 
     result = fit_text(
@@ -187,11 +208,14 @@ if __name__ == "__main__":
         max_size=args.max_size,
         max_leading=args.max_leading,
     )
-    top, right, bottom, left = result["margins"]
-    orient = "landscape" if result["landscape"] else "portrait"
-    pages = result["pages"]
-    suffix = f" [{pages} pages]" if pages > 1 else ""
+    top, right, bottom, left = result.margins
+    orient = "landscape" if result.landscape else "portrait"
+    suffix = f" [{result.pages} pages]" if result.pages > 1 else ""
     print(
-        f"[OK] '{output}' — {result['size']}pt, {result['lines']} lines, "
-        f"{result['paper']} {orient}, margins={top},{right},{bottom},{left}{suffix}"
+        f"[OK] '{output}' — {result.size}pt, {result.lines} lines, "
+        f"{result.paper} {orient}, margins={top},{right},{bottom},{left}{suffix}"
     )
+
+
+if __name__ == "__main__":
+    main()
