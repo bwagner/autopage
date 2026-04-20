@@ -1,0 +1,16 @@
+[project]
+name = "autopage"
+version = "0.1.0"
+description = "Fit a .txt onto the fewest PDF pages possible at the largest readable font size."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Bernhard Wagner" }]
+requires-python = ">=3.10"
+dependencies = [
+    "reportlab",
+    "pytest>=8.0",
+    "pypdf",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
