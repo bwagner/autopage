@@ -27,7 +27,7 @@ dependencies on first run.
 | `--margins T,R,B,L` | `36,36,36,36` | Margins in points (36 = 0.5") |
 | `--font NAME` | `Courier` | Monospace font family (reportlab registered name) |
 | `--tabsize N` | `8` | Tab expansion width |
-| `--min-size N` | `10` | Minimum font size in pt (below this, multi-page) |
+| `--min-size N` | `10` | Lower bound on font size. If text won't fit on one page at this size, spill onto multiple pages instead of shrinking further. |
 | `--max-size N` | none | Cap font size in pt |
 | `--max-leading F` | `1.5` | Max line spacing as multiple of font size |
 
