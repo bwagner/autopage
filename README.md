@@ -17,7 +17,9 @@ Fit a `.txt` file onto the fewest PDF pages possible at the largest readable fon
   each group. `--start-group/-s N` starts at a specific group number (implies
   `--number`). Blank lines and indented lines (treated as continuations of the
   previous item) get no label and do not advance the counter. Labels are drawn
-  on top of the body text, so a long line may overlap its label.
+  in the right gutter; the body font is shrunk just enough to reserve gutter
+  space (sized for the widest label plus one character of padding), so labels
+  never overlap the text.
 
 ## Usage
 

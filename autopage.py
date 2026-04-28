@@ -120,11 +120,15 @@ def _extract_rules(lines):
     return text_lines, rule_positions
 
 
-def _max_font_size_by_width(lines, font, usable_width, max_size):
+def _max_font_size_by_width(lines, font, usable_width, max_size, gutter_label=""):
     lo, hi = 1, max_size or FONT_SIZE_SEARCH_MAX
+    # Trailing space adds one-char padding between body text and gutter label.
+    gutter_str = gutter_label + " " if gutter_label else ""
     while lo < hi:
         mid = (lo + hi + 1) // 2
-        if max((stringWidth(ln, font, mid) for ln in lines), default=0) <= usable_width:
+        gutter = stringWidth(gutter_str, font, mid) if gutter_str else 0
+        widest = max((stringWidth(ln, font, mid) for ln in lines), default=0)
+        if widest <= usable_width - gutter:
             lo = mid
         else:
             hi = mid - 1
@@ -225,7 +229,12 @@ def fit_text(
     labels = _number_lines(raw_lines, start_group) if number else None
     if labels is not None and len(labels) < len(lines):
         labels = labels + [None] * (len(lines) - len(labels))
-    width_size = _max_font_size_by_width(lines, font, uw, max_size)
+    widest_label = max(
+        (lab for lab in (labels or ()) if lab is not None), key=len, default=""
+    )
+    width_size = _max_font_size_by_width(
+        lines, font, uw, max_size, gutter_label=widest_label
+    )
     size, pages = _paginate(lines, width_size, uh, min_size)
     _render(
         output_path,

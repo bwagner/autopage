@@ -84,6 +84,29 @@ def test_max_font_size_monotonic_in_width():
     assert wide >= narrow
 
 
+def test_max_font_size_with_gutter_label_reserves_space():
+    # Reserving gutter must shrink the chosen size and leave room for the label.
+    lines = ["abcdefghijklmnop"]
+    uw = 200.0
+    plain = autopage._max_font_size_by_width(lines, "Courier", uw, max_size=None)
+    with_gutter = autopage._max_font_size_by_width(
+        lines, "Courier", uw, max_size=None, gutter_label="99.9"
+    )
+    assert with_gutter <= plain
+    gutter_w = stringWidth("99.9 ", "Courier", with_gutter)
+    body_w = stringWidth(lines[0], "Courier", with_gutter)
+    assert body_w <= uw - gutter_w
+
+
+def test_max_font_size_empty_gutter_label_no_reservation():
+    lines = ["abcdefghij"]
+    a = autopage._max_font_size_by_width(lines, "Courier", 200.0, max_size=None)
+    b = autopage._max_font_size_by_width(
+        lines, "Courier", 200.0, max_size=None, gutter_label=""
+    )
+    assert a == b
+
+
 def test_max_font_size_honors_max_size_cap():
     # Even on an infinitely wide page, result must not exceed max_size.
     size = autopage._max_font_size_by_width(["x"], "Courier", 10_000.0, max_size=14)
