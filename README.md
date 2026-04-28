@@ -7,6 +7,11 @@ Fit a `.txt` file onto the fewest PDF pages possible at the largest readable fon
 - **Multi-page mode**: when `--min-size` forces overflow, the font is maximized
   (width-constrained, capped at `--max-size`) and lines are distributed evenly
   across as many pages as needed.
+- **Horizontal rules**: a line in the source matching `^\s*-{3,}\s*$` (3+ hyphens,
+  optional surrounding whitespace) is rendered as a thin horizontal line in the
+  gap between its neighbours. Marker lines do not consume vertical space and do
+  not affect pagination. Consecutive markers collapse to one rule; a rule whose
+  neighbours fall on different pages is drawn at the bottom of the earlier page.
 
 ## Usage
 

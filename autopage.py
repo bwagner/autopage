@@ -27,12 +27,13 @@ Useful flags:
 import argparse
 import math
 import os
+import re
 import sys
 import unicodedata
 from dataclasses import dataclass
 
 from reportlab.lib.pagesizes import A4, LETTER
-from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.pdfbase.pdfmetrics import getAscentDescent, stringWidth
 from reportlab.pdfgen import canvas
 
 PAPER = {"A4": A4, "LETTER": LETTER}
@@ -40,6 +41,8 @@ PAPER = {"A4": A4, "LETTER": LETTER}
 
 MAX_LEADING_FACTOR = 1.5
 FONT_SIZE_SEARCH_MAX = 500
+RULE_LINE_RE = re.compile(r"^\s*-{3,}\s*$")
+RULE_LINE_WIDTH = 0.5
 
 
 @dataclass(frozen=True)
@@ -59,6 +62,27 @@ def _load_lines(input_path, tabsize):
     # (ä) so Type 1 WinAnsi fonts like Courier can render them.
     lines = unicodedata.normalize("NFC", raw).expandtabs(tabsize).splitlines()
     return lines or [""]
+
+
+def _extract_rules(lines):
+    """Strip rule-marker lines from input, recording their positions.
+
+    Returns (text_lines, rule_positions) where each entry j of rule_positions
+    means "draw a rule after text line j"; j == -1 means "before the first
+    text line" (top rule). Consecutive markers collapse to one entry.
+    """
+    text_lines = []
+    rule_positions = []
+    last_was_rule = False
+    for line in lines:
+        if RULE_LINE_RE.match(line):
+            if not last_was_rule:
+                rule_positions.append(len(text_lines) - 1)
+                last_was_rule = True
+        else:
+            text_lines.append(line)
+            last_was_rule = False
+    return text_lines, rule_positions
 
 
 def _max_font_size_by_width(lines, font, usable_width, max_size):
@@ -91,19 +115,47 @@ def _paginate(lines, width_size, usable_height, min_size):
     return size, pages
 
 
-def _render(output_path, pages, page_size, margins, font, size, usable_height, max_leading):
-    top, _right, _bottom, left = margins
+def _render(
+    output_path,
+    pages,
+    page_size,
+    margins,
+    font,
+    size,
+    usable_height,
+    max_leading,
+    rule_positions=(),
+):
+    top, right, bottom, left = margins
     pw, ph = page_size
+    rule_x_end = pw - right
+    rule_set = set(rule_positions)
+    ascent, descent = getAscentDescent(font, size)
     c = canvas.Canvas(output_path, pagesize=(pw, ph))
-    for page_lines in pages:
+    global_idx = 0
+    for page_idx, page_lines in enumerate(pages):
         # Spread lines to fill height, but cap leading to avoid absurd gaps.
         line_height = min(usable_height / len(page_lines), size * max_leading)
+        # Centre the rule in the visual gap between glyph extents (descender
+        # of upper line ↔ ascender of lower line), not between baselines.
+        # descent is negative; this is positive at typical leadings.
+        inline_rule_offset = (line_height - ascent - descent) / 2
         c.setFont(font, size)
+        c.setLineWidth(RULE_LINE_WIDTH)
+        if page_idx == 0 and -1 in rule_set:
+            c.line(left, ph - top, rule_x_end, ph - top)
         y = ph - top - size
-        for line in page_lines:
+        for i, line in enumerate(page_lines):
             c.drawString(left, y, line)
+            if (global_idx + i) in rule_set:
+                if i < len(page_lines) - 1:
+                    rule_y = y - inline_rule_offset
+                else:
+                    rule_y = bottom
+                c.line(left, rule_y, rule_x_end, rule_y)
             y -= line_height
         c.showPage()
+        global_idx += len(page_lines)
     c.save()
 
 
@@ -125,10 +177,22 @@ def fit_text(
         pw, ph = ph, pw
     uw, uh = pw - left - right, ph - top - bottom
 
-    lines = _load_lines(input_path, tabsize)
+    raw_lines = _load_lines(input_path, tabsize)
+    lines, rule_positions = _extract_rules(raw_lines)
+    lines = lines or [""]
     width_size = _max_font_size_by_width(lines, font, uw, max_size)
     size, pages = _paginate(lines, width_size, uh, min_size)
-    _render(output_path, pages, (pw, ph), margins, font, size, uh, max_leading)
+    _render(
+        output_path,
+        pages,
+        (pw, ph),
+        margins,
+        font,
+        size,
+        uh,
+        max_leading,
+        rule_positions=rule_positions,
+    )
 
     return FitResult(
         size=size,

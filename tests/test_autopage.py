@@ -132,5 +132,78 @@ def _paginate_unpack(lines, width_size, usable_height, min_size):
     return autopage._paginate(lines, width_size, usable_height, min_size)
 
 
+# --- _extract_rules ---
+
+
+def test_extract_rules_no_markers_unchanged():
+    lines = ["alpha", "beta", "gamma"]
+    text, rules = autopage._extract_rules(lines)
+    assert text == lines
+    assert rules == []
+
+
+def test_extract_rules_top_marker_yields_minus_one():
+    text, rules = autopage._extract_rules(["---", "alpha", "beta"])
+    assert text == ["alpha", "beta"]
+    assert rules == [-1]
+
+
+def test_extract_rules_inline_marker_position():
+    text, rules = autopage._extract_rules(["alpha", "---", "beta"])
+    assert text == ["alpha", "beta"]
+    assert rules == [0]
+
+
+def test_extract_rules_bottom_marker_position():
+    text, rules = autopage._extract_rules(["alpha", "beta", "---"])
+    assert text == ["alpha", "beta"]
+    assert rules == [1]
+
+
+def test_extract_rules_consecutive_markers_collapse():
+    text, rules = autopage._extract_rules(["alpha", "---", "---", "----", "beta"])
+    assert text == ["alpha", "beta"]
+    assert rules == [0]
+
+
+def test_extract_rules_separated_markers_stay_separate():
+    text, rules = autopage._extract_rules(["alpha", "---", "beta", "---", "gamma"])
+    assert text == ["alpha", "beta", "gamma"]
+    assert rules == [0, 1]
+
+
+def test_extract_rules_pattern_requires_three_hyphens():
+    # Single/double hyphens are not markers; whitespace around 3+ is allowed.
+    text, rules = autopage._extract_rules(["-", "--", "a", "  ---  ", "b"])
+    assert text == ["-", "--", "a", "b"]
+    assert rules == [2]
+
+
+def test_extract_rules_only_markers_yields_empty_text():
+    text, rules = autopage._extract_rules(["---", "---"])
+    assert text == []
+    assert rules == [-1]
+
+
+# --- markers don't change pagination math ---
+
+
+def test_markers_preserve_page_and_line_counts(tmp_path):
+    n = 30
+    body = [f"line {i}" for i in range(n)]
+    plain = tmp_path / "plain.txt"
+    plain.write_text("\n".join(body), encoding="utf-8")
+    marked = tmp_path / "marked.txt"
+    # Sprinkle markers: top, middle, bottom, plus a consecutive pair.
+    marked_lines = ["---", *body[:10], "---", "---", *body[10:20], *body[20:], "---"]
+    marked.write_text("\n".join(marked_lines), encoding="utf-8")
+
+    out_a = tmp_path / "a.pdf"
+    out_b = tmp_path / "b.pdf"
+    a = autopage.fit_text(str(plain), str(out_a))
+    b = autopage.fit_text(str(marked), str(out_b))
+    assert (b.size, b.lines, b.pages) == (a.size, a.lines, a.pages)
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
