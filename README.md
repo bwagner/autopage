@@ -12,6 +12,11 @@ Fit a `.txt` file onto the fewest PDF pages possible at the largest readable fon
   gap between its neighbours. Marker lines do not consume vertical space and do
   not affect pagination. Consecutive markers collapse to one rule; a rule whose
   neighbours fall on different pages is drawn at the bottom of the earlier page.
+- **Line numbering**: `--number/-n` prints `G.N` labels in the right gutter,
+  where `G` is the group (delimited by horizontal rules) and `N` resets within
+  each group. `--start-group/-s N` starts at a specific group number (implies
+  `--number`). Blank/whitespace-only lines are skipped. Labels are drawn on
+  top of the body text, so a long line may overlap its label.
 
 ## Usage
 
@@ -35,6 +40,8 @@ dependencies on first run.
 | `--min-size N` | `10` | Lower bound on font size. If text won't fit on one page at this size, spill onto multiple pages instead of shrinking further. |
 | `--max-size N` | none | Cap font size in pt |
 | `--max-leading F` | `1.5` | Max line spacing as multiple of font size |
+| `--number\|-n` | off | Number lines as `G.N` in the right gutter |
+| `--start-group\|-s N` | `1` | Group number to start at (implies `--number`) |
 
 ## Tests
 

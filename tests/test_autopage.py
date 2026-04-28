@@ -205,5 +205,83 @@ def test_markers_preserve_page_and_line_counts(tmp_path):
     assert (b.size, b.lines, b.pages) == (a.size, a.lines, a.pages)
 
 
+# --- _number_lines ---
+
+
+def test_number_lines_no_markers_basic():
+    assert autopage._number_lines(["foo", "bar", "baz"], start=1) == [
+        "1.1",
+        "1.2",
+        "1.3",
+    ]
+
+
+def test_number_lines_one_marker_bumps_group():
+    assert autopage._number_lines(["foo", "---", "bar"], start=1) == ["1.1", "2.1"]
+
+
+def test_number_lines_custom_start():
+    assert autopage._number_lines(["foo", "bar", "---", "baz"], start=5) == [
+        "5.1",
+        "5.2",
+        "6.1",
+    ]
+
+
+def test_number_lines_top_marker_does_not_bump():
+    assert autopage._number_lines(["---", "foo", "bar"], start=1) == ["1.1", "1.2"]
+
+
+def test_number_lines_bottom_marker_no_effect():
+    assert autopage._number_lines(["foo", "---"], start=1) == ["1.1"]
+
+
+def test_number_lines_consecutive_markers_collapse():
+    assert autopage._number_lines(["foo", "---", "---", "bar"], start=1) == [
+        "1.1",
+        "2.1",
+    ]
+
+
+def test_number_lines_blank_line_skipped_does_not_advance():
+    assert autopage._number_lines(["foo", "", "bar"], start=1) == ["1.1", None, "1.2"]
+
+
+def test_number_lines_whitespace_only_is_blank():
+    assert autopage._number_lines(["foo", "   ", "bar"], start=1) == [
+        "1.1",
+        None,
+        "1.2",
+    ]
+
+
+def test_number_lines_zero_start():
+    assert autopage._number_lines(["foo", "---", "bar"], start=0) == ["0.1", "1.1"]
+
+
+def test_number_lines_negative_start():
+    assert autopage._number_lines(["foo", "---", "bar"], start=-3) == ["-3.1", "-2.1"]
+
+
+def test_number_lines_parallel_to_extracted_text():
+    raw = ["alpha", "---", "beta", "", "gamma", "---", "delta"]
+    text, _ = autopage._extract_rules(raw)
+    labels = autopage._number_lines(raw, start=1)
+    assert len(labels) == len(text)
+
+
+# --- numbered PDF round-trip ---
+
+
+def test_numbered_pdf_contains_labels(tmp_path):
+    src = tmp_path / "in.txt"
+    src.write_text("alpha\nbeta\n---\ngamma\n", encoding="utf-8")
+    out = tmp_path / "out.pdf"
+    autopage.fit_text(str(src), str(out), number=True, start_group=1)
+    text = _extract_text(out)
+    for token in ("alpha", "beta", "gamma", "1.1", "1.2", "2.1"):
+        assert token in text
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

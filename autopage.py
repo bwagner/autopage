@@ -64,6 +64,37 @@ def _load_lines(input_path, tabsize):
     return lines or [""]
 
 
+def _number_lines(raw_lines, start):
+    """Return right-gutter labels parallel to the post-_extract_rules text lines.
+
+    Each non-blank text line gets ``f"{group}.{n}"`` (n resets per group).
+    Whitespace-only lines get ``None`` and don't advance the within-group
+    counter. HLS lines bump the group lazily, so consecutive HLS collapse and
+    a top-of-file HLS (with no preceding numbered line) does not advance.
+    """
+    labels = []
+    group = start
+    within = 0
+    bumped_yet = False
+    pending_bump = False
+    for line in raw_lines:
+        if RULE_LINE_RE.match(line):
+            if bumped_yet:
+                pending_bump = True
+            continue
+        if pending_bump:
+            group += 1
+            within = 0
+            pending_bump = False
+        if line.strip() == "":
+            labels.append(None)
+        else:
+            within += 1
+            labels.append(f"{group}.{within}")
+            bumped_yet = True
+    return labels
+
+
 def _extract_rules(lines):
     """Strip rule-marker lines from input, recording their positions.
 
@@ -125,6 +156,7 @@ def _render(
     usable_height,
     max_leading,
     rule_positions=(),
+    labels=None,
 ):
     top, right, bottom, left = margins
     pw, ph = page_size
@@ -147,6 +179,10 @@ def _render(
         y = ph - top - size
         for i, line in enumerate(page_lines):
             c.drawString(left, y, line)
+            if labels is not None:
+                label = labels[global_idx + i]
+                if label is not None:
+                    c.drawRightString(rule_x_end, y, label)
             if (global_idx + i) in rule_set:
                 if i < len(page_lines) - 1:
                     rule_y = y - inline_rule_offset
@@ -170,6 +206,8 @@ def fit_text(
     min_size=10,
     max_size=None,
     max_leading=MAX_LEADING_FACTOR,
+    number=False,
+    start_group=1,
 ):
     top, right, bottom, left = margins
     pw, ph = PAPER[paper]
@@ -180,6 +218,9 @@ def fit_text(
     raw_lines = _load_lines(input_path, tabsize)
     lines, rule_positions = _extract_rules(raw_lines)
     lines = lines or [""]
+    labels = _number_lines(raw_lines, start_group) if number else None
+    if labels is not None and len(labels) < len(lines):
+        labels = labels + [None] * (len(lines) - len(labels))
     width_size = _max_font_size_by_width(lines, font, uw, max_size)
     size, pages = _paginate(lines, width_size, uh, min_size)
     _render(
@@ -192,6 +233,7 @@ def fit_text(
         uh,
         max_leading,
         rule_positions=rule_positions,
+        labels=labels,
     )
 
     return FitResult(
@@ -251,7 +293,27 @@ def main(argv=None):
         dest="max_leading",
         help=f"Max line spacing as a multiple of font size (default {MAX_LEADING_FACTOR})",
     )
+    ap.add_argument(
+        "--number",
+        "-n",
+        action="store_true",
+        dest="number",
+        help="Number lines in the right gutter as G.N. Groups are delimited "
+        "by horizontal-rule markers; blank lines are skipped.",
+    )
+    ap.add_argument(
+        "--start-group",
+        "-s",
+        type=int,
+        default=None,
+        dest="start_group",
+        help="Group number to start at (default 1). Implies --number.",
+    )
     args = ap.parse_args(argv)
+    if args.start_group is not None:
+        args.number = True
+    if args.start_group is None:
+        args.start_group = 1
 
     output = args.output or os.path.splitext(args.input)[0] + ".pdf"
 
@@ -271,6 +333,8 @@ def main(argv=None):
         min_size=args.min_size,
         max_size=args.max_size,
         max_leading=args.max_leading,
+        number=args.number,
+        start_group=args.start_group,
     )
     top, right, bottom, left = result.margins
     orient = "landscape" if result.landscape else "portrait"
