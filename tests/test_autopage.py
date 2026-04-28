@@ -263,6 +263,27 @@ def test_number_lines_negative_start():
     assert autopage._number_lines(["foo", "---", "bar"], start=-3) == ["-3.1", "-2.1"]
 
 
+def test_number_lines_indented_line_skipped_does_not_advance():
+    assert autopage._number_lines(["foo", "  bar", "baz"], start=1) == [
+        "1.1",
+        None,
+        "1.2",
+    ]
+
+
+def test_number_lines_indented_only_lines_get_no_labels():
+    assert autopage._number_lines(["  foo", "  bar"], start=1) == [None, None]
+
+
+def test_number_lines_indented_after_marker_no_bump():
+    # Indented lines don't count as numbered output, so a top-of-file HLS
+    # followed only by indented lines still doesn't bump the group.
+    assert autopage._number_lines(["  intro", "---", "foo"], start=1) == [
+        None,
+        "1.1",
+    ]
+
+
 def test_number_lines_parallel_to_extracted_text():
     raw = ["alpha", "---", "beta", "", "gamma", "---", "delta"]
     text, _ = autopage._extract_rules(raw)

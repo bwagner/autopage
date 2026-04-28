@@ -15,8 +15,9 @@ Fit a `.txt` file onto the fewest PDF pages possible at the largest readable fon
 - **Line numbering**: `--number/-n` prints `G.N` labels in the right gutter,
   where `G` is the group (delimited by horizontal rules) and `N` resets within
   each group. `--start-group/-s N` starts at a specific group number (implies
-  `--number`). Blank/whitespace-only lines are skipped. Labels are drawn on
-  top of the body text, so a long line may overlap its label.
+  `--number`). Blank lines and indented lines (treated as continuations of the
+  previous item) get no label and do not advance the counter. Labels are drawn
+  on top of the body text, so a long line may overlap its label.
 
 ## Usage
 

@@ -67,10 +67,14 @@ def _load_lines(input_path, tabsize):
 def _number_lines(raw_lines, start):
     """Return right-gutter labels parallel to the post-_extract_rules text lines.
 
-    Each non-blank text line gets ``f"{group}.{n}"`` (n resets per group).
-    Whitespace-only lines get ``None`` and don't advance the within-group
-    counter. HLS lines bump the group lazily, so consecutive HLS collapse and
-    a top-of-file HLS (with no preceding numbered line) does not advance.
+    A label is ``f"{group}.{n}"`` (n resets per group). Skipped (no label, no
+    counter advance) are: whitespace-only lines and indented lines (treated as
+    continuations of the previous numbered line). HLS lines bump the group
+    lazily, so consecutive HLS collapse and a top-of-file HLS (with no
+    preceding numbered line) does not advance.
+
+    Caller contract: ``raw_lines`` is the post-``expandtabs`` output of
+    ``_load_lines``, so leading whitespace is always spaces here.
     """
     labels = []
     group = start
@@ -86,7 +90,7 @@ def _number_lines(raw_lines, start):
             group += 1
             within = 0
             pending_bump = False
-        if line.strip() == "":
+        if line.strip() == "" or line.startswith(" "):
             labels.append(None)
         else:
             within += 1
