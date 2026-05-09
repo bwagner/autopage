@@ -118,7 +118,9 @@ def test_max_font_size_honors_max_size_cap():
 
 def test_paginate_single_page_when_height_fits():
     lines = ["a", "b", "c"]
-    size, pages = _paginate_unpack(lines, width_size=20, usable_height=1000, min_size=10)
+    size, pages = _paginate_unpack(
+        lines, width_size=20, usable_height=1000, min_size=10
+    )
     assert len(pages) == 1
     assert pages[0] == lines
     assert size >= 10
@@ -325,6 +327,34 @@ def test_numbered_pdf_contains_labels(tmp_path):
     text = _extract_text(out)
     for token in ("alpha", "beta", "gamma", "1.1", "1.2", "2.1"):
         assert token in text
+
+
+# --- mtime timestamp in top margin ---
+
+
+def test_date_does_not_perturb_layout(tmp_path):
+    src = tmp_path / "in.txt"
+    src.write_text("\n".join(f"line {i}" for i in range(20)), encoding="utf-8")
+    out_on = tmp_path / "on.pdf"
+    out_off = tmp_path / "off.pdf"
+    a = autopage.fit_text(str(src), str(out_on), date=True)
+    b = autopage.fit_text(str(src), str(out_off), date=False)
+    assert (b.size, b.lines, b.pages) == (a.size, a.lines, a.pages)
+
+
+def test_date_appears_in_pdf(tmp_path):
+    import os
+    import time
+
+    src = tmp_path / "in.txt"
+    src.write_text("hello\n", encoding="utf-8")
+    # Pin mtime to a known instant so the formatted timestamp is deterministic.
+    fixed = time.mktime((2026, 5, 9, 14, 23, 45, 0, 0, -1))
+    os.utime(src, (fixed, fixed))
+    out = tmp_path / "out.pdf"
+    autopage.fit_text(str(src), str(out), date=True)
+    text = _extract_text(out)
+    assert "2026-05-09 14:23:45" in text
 
 
 if __name__ == "__main__":

@@ -29,6 +29,7 @@ import math
 import os
 import re
 import sys
+import time
 import unicodedata
 from dataclasses import dataclass
 
@@ -43,6 +44,9 @@ MAX_LEADING_FACTOR = 1.5
 FONT_SIZE_SEARCH_MAX = 500
 RULE_LINE_RE = re.compile(r"^\s*-{3,}\s*$")
 RULE_LINE_WIDTH = 0.5
+DATE_FONT_SIZE = 6
+DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+DATE_TOP_PAD = 2
 
 
 @dataclass(frozen=True)
@@ -165,6 +169,7 @@ def _render(
     max_leading,
     rule_positions=(),
     labels=None,
+    date_str=None,
 ):
     top, right, bottom, left = margins
     pw, ph = page_size
@@ -180,6 +185,11 @@ def _render(
         # of upper line ↔ ascender of lower line), not between baselines.
         # descent is negative; this is positive at typical leadings.
         inline_rule_offset = (line_height - ascent - descent) / 2
+        if date_str is not None:
+            # Drawn in the top margin (well above body top at ph - top), so it
+            # never enters layout calculations.
+            c.setFont(font, DATE_FONT_SIZE)
+            c.drawRightString(rule_x_end, ph - DATE_TOP_PAD - DATE_FONT_SIZE, date_str)
         c.setFont(font, size)
         c.setLineWidth(RULE_LINE_WIDTH)
         if page_idx == 0 and -1 in rule_set:
@@ -216,6 +226,7 @@ def fit_text(
     max_leading=MAX_LEADING_FACTOR,
     number=False,
     start_group=1,
+    date=True,
 ):
     top, right, bottom, left = margins
     pw, ph = PAPER[paper]
@@ -236,6 +247,11 @@ def fit_text(
         lines, font, uw, max_size, gutter_label=widest_label
     )
     size, pages = _paginate(lines, width_size, uh, min_size)
+    date_str = (
+        time.strftime(DATE_FORMAT, time.localtime(os.path.getmtime(input_path)))
+        if date
+        else None
+    )
     _render(
         output_path,
         pages,
@@ -247,6 +263,7 @@ def fit_text(
         max_leading,
         rule_positions=rule_positions,
         labels=labels,
+        date_str=date_str,
     )
 
     return FitResult(
@@ -322,6 +339,14 @@ def main(argv=None):
         dest="start_group",
         help="Group number to start at (default 1). Implies --number.",
     )
+    ap.add_argument(
+        "--date",
+        default=True,
+        action=argparse.BooleanOptionalAction,
+        dest="date",
+        help="Print the input file's mtime as YYYY-MM-DD HH:MM:SS in the top "
+        "margin (default on; --no-date suppresses).",
+    )
     args = ap.parse_args(argv)
     if args.start_group is not None:
         args.number = True
@@ -348,6 +373,7 @@ def main(argv=None):
         max_leading=args.max_leading,
         number=args.number,
         start_group=args.start_group,
+        date=args.date,
     )
     top, right, bottom, left = result.margins
     orient = "landscape" if result.landscape else "portrait"

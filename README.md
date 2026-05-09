@@ -45,6 +45,7 @@ dependencies on first run.
 | `--max-leading F` | `1.5` | Max line spacing as multiple of font size |
 | `--number\|-n` | off | Number lines as `G.N` in the right gutter |
 | `--start-group\|-s N` | `1` | Group number to start at (implies `--number`) |
+| `--date` / `--no-date` | on | Print the input file's mtime as `YYYY-MM-DD HH:MM:SS` in the top margin (drawn outside the body, layout-neutral) |
 
 ## Tests
 
