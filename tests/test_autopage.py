@@ -482,5 +482,66 @@ def test_no_header_suppresses_the_whole_line(tmp_path):
     assert _DATE not in text
 
 
+# --- CLI option shape ---
+
+
+def _optional_actions():
+    """Every non-positional action of the real CLI parser, help excluded."""
+    return [
+        a
+        for a in autopage._build_parser()._actions
+        if a.option_strings and "--help" not in a.option_strings
+    ]
+
+
+def _shorts(action):
+    return [s for s in action.option_strings if len(s) == 2 and s[0] == "-"]
+
+
+def test_every_optional_flag_has_a_short_form():
+    missing = [a.option_strings for a in _optional_actions() if not _shorts(a)]
+    assert missing == []
+
+
+def test_short_flags_are_unique():
+    all_shorts = [s for a in _optional_actions() for s in _shorts(a)]
+    assert len(all_shorts) == len(set(all_shorts))
+
+
+def test_short_flags_do_not_collide_with_help():
+    all_shorts = {s for a in _optional_actions() for s in _shorts(a)}
+    assert "-h" not in all_shorts
+
+
+def test_short_flags_drive_the_same_options(tmp_path):
+    src = tmp_path / "in.txt"
+    src.write_text("alpha\nbeta\n", encoding="utf-8")
+    out_short = tmp_path / "short.pdf"
+    out_long = tmp_path / "long.pdf"
+    common = ["-p", "LETTER", "-l", "-m", "20,20,20,20", "-f", "Courier"]
+    autopage.main([str(src), str(out_short), *common, "-t", "4", "-i", "8", "-s", "3"])
+    autopage.main(
+        [
+            str(src),
+            str(out_long),
+            "--paper",
+            "LETTER",
+            "--landscape",
+            "--margins",
+            "20,20,20,20",
+            "--font",
+            "Courier",
+            "--tabsize",
+            "4",
+            "--min-size",
+            "8",
+            "--start-group",
+            "3",
+        ]
+    )
+    assert _extract_text(out_short) == _extract_text(out_long)
+    assert "3.1" in _extract_text(out_short)  # -s 3 implied --number
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

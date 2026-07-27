@@ -41,17 +41,17 @@ dependencies on first run.
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--paper A4\|LETTER` | `A4` | Paper size |
-| `--landscape` | off | Landscape orientation |
-| `--margins T,R,B,L` | `36,36,36,36` | Margins in points (36 = 0.5") |
-| `--font NAME` | `Courier` | Monospace font family (reportlab registered name) |
-| `--tabsize N` | `8` | Tab expansion width |
-| `--min-size N` | `10` | Lower bound on font size. If text won't fit on one page at this size, spill onto multiple pages instead of shrinking further. |
-| `--max-size N` | none | Cap font size in pt |
-| `--max-leading F` | `1.5` | Max line spacing as multiple of font size |
+| `--paper\|-p A4\|LETTER` | `A4` | Paper size |
+| `--landscape\|-l` | off | Landscape orientation |
+| `--margins\|-m T,R,B,L` | `36,36,36,36` | Margins in points (36 = 0.5") |
+| `--font\|-f NAME` | `Courier` | Monospace font family (reportlab registered name) |
+| `--tabsize\|-t N` | `8` | Tab expansion width |
+| `--min-size\|-i N` | `10` | Lower bound on font size. If text won't fit on one page at this size, spill onto multiple pages instead of shrinking further. |
+| `--max-size\|-x N` | none | Cap font size in pt |
+| `--max-leading\|-L F` | `1.5` | Max line spacing as multiple of font size |
 | `--number\|-n` | off | Number lines as `G.N` in the right gutter |
 | `--start-group\|-s N` | `1` | Group number to start at (implies `--number`) |
-| `--header` / `--no-header` | on | Print `<title>  p. N/M  YYYY-MM-DD HH:MM:SS` in the top margin (drawn outside the body, layout-neutral) |
+| `--header\|-H` / `--no-header` | on | Print `<title>  p. N/M  YYYY-MM-DD HH:MM:SS` in the top margin (drawn outside the body, layout-neutral). The negated form has no short option. |
 
 ## Tests
 

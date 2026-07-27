@@ -15,13 +15,14 @@ Usage:
   ./autopage.py input.txt output.pdf [--paper A4|LETTER] [--landscape]
 
 Useful flags:
-  --paper A4|LETTER         (default: A4)
-  --landscape               (make it landscape)
-  --margins 36,36,36,36     (points: top,right,bottom,left; default 36=0.5")
-  --font Courier            (reportlab-registered monospace font name)
-  --tabsize 8               (tab expansion width)
-  --min-size 10             (minimum font size in pt; may produce >1 page)
-  --max-size N              (cap font size in pt)
+  --paper / -p A4|LETTER    (default: A4)
+  --landscape / -l          (make it landscape)
+  --margins / -m 36,36,36,36 (points: top,right,bottom,left; default 36=0.5")
+  --font / -f Courier       (reportlab-registered monospace font name)
+  --tabsize / -t 8          (tab expansion width)
+  --min-size / -i 10        (minimum font size in pt; may produce >1 page)
+  --max-size / -x N         (cap font size in pt)
+  --max-leading / -L F      (max line spacing as a multiple of font size)
   --number / -n             (number lines as G.N in the right gutter)
   --no-header               (suppress the top-margin "title  p. N/M  mtime" line)
 """
@@ -343,7 +344,7 @@ def _parse_margins(spec):
     return parts
 
 
-def main(argv=None):
+def _build_parser():
     ap = argparse.ArgumentParser(
         description="Fit text onto the fewest PDF pages at the largest readable font size."
     )
@@ -353,17 +354,19 @@ def main(argv=None):
         nargs="?",
         help="Output .pdf file (default: input with .pdf extension)",
     )
-    ap.add_argument("--paper", default="A4", choices=PAPER)
-    ap.add_argument("--landscape", action="store_true")
+    ap.add_argument("--paper", "-p", default="A4", choices=PAPER)
+    ap.add_argument("--landscape", "-l", action="store_true")
     ap.add_argument(
         "--margins",
+        "-m",
         default="36,36,36,36",
         help='Points: top,right,bottom,left (default 36=0.5")',
     )
-    ap.add_argument("--font", default="Courier")
-    ap.add_argument("--tabsize", type=int, default=8)
+    ap.add_argument("--font", "-f", default="Courier")
+    ap.add_argument("--tabsize", "-t", type=int, default=8)
     ap.add_argument(
         "--min-size",
+        "-i",
         type=int,
         default=10,
         dest="min_size",
@@ -371,6 +374,7 @@ def main(argv=None):
     )
     ap.add_argument(
         "--max-size",
+        "-x",
         type=int,
         default=None,
         dest="max_size",
@@ -378,6 +382,7 @@ def main(argv=None):
     )
     ap.add_argument(
         "--max-leading",
+        "-L",
         type=float,
         default=MAX_LEADING_FACTOR,
         dest="max_leading",
@@ -401,6 +406,7 @@ def main(argv=None):
     )
     ap.add_argument(
         "--header",
+        "-H",
         default=True,
         action=argparse.BooleanOptionalAction,
         dest="header",
@@ -408,7 +414,11 @@ def main(argv=None):
         "where title is the first non-blank line and the date is the input "
         "file's mtime (default on; --no-header suppresses).",
     )
-    args = ap.parse_args(argv)
+    return ap
+
+
+def main(argv=None):
+    args = _build_parser().parse_args(argv)
     if args.start_group is not None:
         args.number = True
     if args.start_group is None:
