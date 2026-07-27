@@ -45,6 +45,7 @@ dependencies on first run.
 | `--landscape\|-l` | off | Landscape orientation |
 | `--margins\|-m T,R,B,L` | `36,36,36,36` | Margins in points (36 = 0.5") |
 | `--font\|-f NAME` | `Courier` | Monospace font family (reportlab registered name) |
+| `--list-fonts\|-F` | - | Print the fonts usable with `--font`, monospace ones marked, and exit |
 | `--tabsize\|-t N` | `8` | Tab expansion width |
 | `--min-size\|-i N` | `10` | Lower bound on font size. If text won't fit on one page at this size, spill onto multiple pages instead of shrinking further. |
 | `--max-size\|-x N` | none | Cap font size in pt |
@@ -52,6 +53,24 @@ dependencies on first run.
 | `--number\|-n` | off | Number lines as `G.N` in the right gutter |
 | `--start-group\|-s N` | `1` | Group number to start at (implies `--number`) |
 | `--header\|-H` / `--no-header` | on | Print `<title>  p. N/M  YYYY-MM-DD HH:MM:SS` in the top margin (drawn outside the body, layout-neutral). The negated form has no short option. |
+
+### Fonts
+
+`--list-fonts` prints the 14 standard PDF base fonts, which need no embedding:
+
+```
+$ ./autopage.py --list-fonts
+Courier                (monospace)
+Courier-Bold           (monospace)
+Courier-BoldOblique    (monospace)
+Courier-Oblique        (monospace)
+Helvetica
+...
+```
+
+The marker is measured, not hardcoded: a font counts as monospace when every printable
+ASCII character has the same advance width. Since autopage lays out plain text, the
+`Courier*` family is normally what you want. Note the name is `Times-Roman`, not `Times`.
 
 ## Tests
 

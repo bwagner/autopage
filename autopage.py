@@ -19,6 +19,7 @@ Useful flags:
   --landscape / -l          (make it landscape)
   --margins / -m 36,36,36,36 (points: top,right,bottom,left; default 36=0.5")
   --font / -f Courier       (reportlab-registered monospace font name)
+  --list-fonts / -F         (print the usable fonts, monospace marked, and exit)
   --tabsize / -t 8          (tab expansion width)
   --min-size / -i 10        (minimum font size in pt; may produce >1 page)
   --max-size / -x N         (cap font size in pt)
@@ -31,6 +32,7 @@ import argparse
 import math
 import os
 import re
+import string
 import sys
 import time
 import unicodedata
@@ -53,6 +55,9 @@ HEADER_SEP = "  "
 PAGE_LABEL_FMT = "p. {page}/{total}"
 ELLIPSIS = "..."
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+MONOSPACE_MARKER = "(monospace)"
+FONT_PROBE_SIZE = 12
+FONT_PROBE_CHARS = string.printable.strip()
 
 
 @dataclass(frozen=True)
@@ -337,6 +342,41 @@ def fit_text(
     )
 
 
+def _available_fonts():
+    """Sorted names of the fonts reportlab can use without registration.
+
+    ``canvas.getAvailableFonts()`` is authoritative here;
+    ``pdfmetrics.getRegisteredFontNames()`` lists only fonts already touched
+    (just Symbol and ZapfDingbats on a fresh interpreter).
+    """
+    return sorted(canvas.Canvas(os.devnull).getAvailableFonts())
+
+
+def _is_monospace(font):
+    """True when every printable ASCII char has the same advance width."""
+    widths = {stringWidth(ch, font, FONT_PROBE_SIZE) for ch in FONT_PROBE_CHARS}
+    return len(widths) == 1
+
+
+def _format_font_list():
+    fonts = _available_fonts()
+    pad = max(len(f) for f in fonts)
+    return "\n".join(
+        f"{f:<{pad}}  {MONOSPACE_MARKER}" if _is_monospace(f) else f for f in fonts
+    )
+
+
+class _ListFontsAction(argparse.Action):
+    """Print the usable fonts and exit, like --help, before argv validation."""
+
+    def __init__(self, option_strings, dest, **kwargs):
+        super().__init__(option_strings, dest, nargs=0, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print(_format_font_list())
+        parser.exit()
+
+
 def _parse_margins(spec):
     parts = tuple(int(x) for x in spec.split(","))
     if len(parts) != 4:
@@ -363,6 +403,12 @@ def _build_parser():
         help='Points: top,right,bottom,left (default 36=0.5")',
     )
     ap.add_argument("--font", "-f", default="Courier")
+    ap.add_argument(
+        "--list-fonts",
+        "-F",
+        action=_ListFontsAction,
+        help="List the fonts usable with --font (monospace ones marked) and exit.",
+    )
     ap.add_argument("--tabsize", "-t", type=int, default=8)
     ap.add_argument(
         "--min-size",

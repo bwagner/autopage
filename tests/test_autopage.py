@@ -513,6 +513,51 @@ def test_short_flags_do_not_collide_with_help():
     assert "-h" not in all_shorts
 
 
+def test_list_fonts_exits_cleanly_without_an_input_file(capsys):
+    with pytest.raises(SystemExit) as exc:
+        autopage.main(["--list-fonts"])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    for font in ("Courier", "Helvetica", "Times-Roman"):
+        assert font in out
+
+
+def test_list_fonts_short_flag_matches_long(capsys):
+    with pytest.raises(SystemExit):
+        autopage.main(["--list-fonts"])
+    long_out = capsys.readouterr().out
+    assert "Courier" in long_out  # guard against comparing two empty strings
+    with pytest.raises(SystemExit):
+        autopage.main(["-F"])
+    assert capsys.readouterr().out == long_out
+
+
+def test_list_fonts_marks_monospace_families(capsys):
+    with pytest.raises(SystemExit):
+        autopage.main(["--list-fonts"])
+    lines = capsys.readouterr().out.splitlines()
+    by_font = {ln.split()[0]: ln for ln in lines if ln.strip()}
+    assert autopage.MONOSPACE_MARKER in by_font["Courier"]
+    assert autopage.MONOSPACE_MARKER not in by_font["Helvetica"]
+    assert autopage.MONOSPACE_MARKER not in by_font["Times-Roman"]
+
+
+def test_is_monospace_measures_rather_than_guesses():
+    assert autopage._is_monospace("Courier")
+    assert autopage._is_monospace("Courier-Bold")
+    assert not autopage._is_monospace("Helvetica")
+    assert not autopage._is_monospace("Times-Roman")
+    # Symbol shares widths for a few chars but is not fixed-pitch overall.
+    assert not autopage._is_monospace("Symbol")
+
+
+def test_available_fonts_includes_the_standard_base_set():
+    fonts = autopage._available_fonts()
+    assert fonts == sorted(fonts)
+    for font in ("Courier", "Helvetica", "Times-Roman", "Symbol", "ZapfDingbats"):
+        assert font in fonts
+
+
 def test_short_flags_drive_the_same_options(tmp_path):
     src = tmp_path / "in.txt"
     src.write_text("alpha\nbeta\n", encoding="utf-8")
