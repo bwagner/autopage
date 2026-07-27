@@ -329,32 +329,157 @@ def test_numbered_pdf_contains_labels(tmp_path):
         assert token in text
 
 
-# --- mtime timestamp in top margin ---
+# --- _title ---
 
 
-def test_date_does_not_perturb_layout(tmp_path):
+def test_title_is_first_nonblank_line():
+    assert autopage._title(["alpha", "beta"]) == "alpha"
+
+
+def test_title_skips_leading_blank_lines():
+    assert autopage._title(["", "   ", "alpha"]) == "alpha"
+
+
+def test_title_skips_leading_rule_marker():
+    assert autopage._title(["---", "alpha"]) == "alpha"
+
+
+def test_title_is_stripped():
+    assert autopage._title(["   indented title   ", "beta"]) == "indented title"
+
+
+def test_title_all_blank_input_is_empty():
+    assert autopage._title(["", "   ", "---"]) == ""
+
+
+# --- _truncate_to_width ---
+
+
+def test_truncate_leaves_fitting_text_unchanged():
+    text = "short"
+    w = stringWidth(text, "Courier", autopage.HEADER_FONT_SIZE)
+    assert (
+        autopage._truncate_to_width(text, "Courier", autopage.HEADER_FONT_SIZE, w)
+        == text
+    )
+
+
+def test_truncate_clips_and_marks_overlong_text():
+    text = "a very long title that will not fit in the space available"
+    max_width = stringWidth("a" * 20, "Courier", autopage.HEADER_FONT_SIZE)
+    out = autopage._truncate_to_width(
+        text, "Courier", autopage.HEADER_FONT_SIZE, max_width
+    )
+    assert out != text
+    assert out.endswith(autopage.ELLIPSIS)
+    assert stringWidth(out, "Courier", autopage.HEADER_FONT_SIZE) <= max_width
+
+
+def test_truncate_returns_empty_when_nothing_fits():
+    text = "anything"
+    assert (
+        autopage._truncate_to_width(text, "Courier", autopage.HEADER_FONT_SIZE, 0) == ""
+    )
+
+
+# --- _page_header ---
+
+
+_HEADER_ARGS = ("Courier", autopage.HEADER_FONT_SIZE)
+_DATE = "2026-05-09 14:23:45"
+
+
+def test_page_header_orders_title_page_date():
+    h = autopage._page_header("My Title", 1, 3, _DATE, *_HEADER_ARGS, max_width=10_000)
+    assert "p. 1/3" in h
+    assert h.index("My Title") < h.index("p. 1/3") < h.index(_DATE)
+
+
+def test_page_header_joins_with_separator():
+    h = autopage._page_header("T", 2, 7, _DATE, *_HEADER_ARGS, max_width=10_000)
+    assert h == f"T{autopage.HEADER_SEP}p. 2/7{autopage.HEADER_SEP}{_DATE}"
+
+
+def test_page_header_without_title_has_no_leading_separator():
+    h = autopage._page_header("", 1, 1, _DATE, *_HEADER_ARGS, max_width=10_000)
+    assert h == f"p. 1/1{autopage.HEADER_SEP}{_DATE}"
+
+
+def test_page_header_truncates_only_the_title():
+    title = "an extremely long document title that cannot possibly fit up there"
+    tail = f"p. 1/1{autopage.HEADER_SEP}{_DATE}"
+    max_width = stringWidth(
+        f"xxxxxxxxxx{autopage.HEADER_SEP}{tail}", "Courier", autopage.HEADER_FONT_SIZE
+    )
+    h = autopage._page_header(title, 1, 1, _DATE, *_HEADER_ARGS, max_width=max_width)
+    assert h.endswith(tail)
+    assert not h.startswith(title)
+    assert stringWidth(h, "Courier", autopage.HEADER_FONT_SIZE) <= max_width
+
+
+def test_page_header_drops_title_when_tail_alone_barely_fits():
+    tail = f"p. 1/1{autopage.HEADER_SEP}{_DATE}"
+    max_width = stringWidth(tail, "Courier", autopage.HEADER_FONT_SIZE)
+    h = autopage._page_header(
+        "Some Title", 1, 1, _DATE, *_HEADER_ARGS, max_width=max_width
+    )
+    assert h == tail
+
+
+# --- header in the top margin (end-to-end) ---
+
+
+def _write_with_fixed_mtime(path, text):
+    import os
+    import time
+
+    path.write_text(text, encoding="utf-8")
+    # Pin mtime to a known instant so the formatted timestamp is deterministic.
+    fixed = time.mktime((2026, 5, 9, 14, 23, 45, 0, 0, -1))
+    os.utime(path, (fixed, fixed))
+
+
+def test_header_does_not_perturb_layout(tmp_path):
     src = tmp_path / "in.txt"
     src.write_text("\n".join(f"line {i}" for i in range(20)), encoding="utf-8")
     out_on = tmp_path / "on.pdf"
     out_off = tmp_path / "off.pdf"
-    a = autopage.fit_text(str(src), str(out_on), date=True)
-    b = autopage.fit_text(str(src), str(out_off), date=False)
+    a = autopage.fit_text(str(src), str(out_on), header=True)
+    b = autopage.fit_text(str(src), str(out_off), header=False)
     assert (b.size, b.lines, b.pages) == (a.size, a.lines, a.pages)
 
 
-def test_date_appears_in_pdf(tmp_path):
-    import os
-    import time
-
+def test_header_appears_in_pdf(tmp_path):
     src = tmp_path / "in.txt"
-    src.write_text("hello\n", encoding="utf-8")
-    # Pin mtime to a known instant so the formatted timestamp is deterministic.
-    fixed = time.mktime((2026, 5, 9, 14, 23, 45, 0, 0, -1))
-    os.utime(src, (fixed, fixed))
+    _write_with_fixed_mtime(src, "My Document Title\nbody line\n")
     out = tmp_path / "out.pdf"
-    autopage.fit_text(str(src), str(out), date=True)
+    autopage.fit_text(str(src), str(out), header=True)
     text = _extract_text(out)
-    assert "2026-05-09 14:23:45" in text
+    assert "My Document Title" in text
+    assert "p. 1/1" in text
+    assert _DATE in text
+
+
+def test_header_page_numbers_count_up_to_total(tmp_path):
+    src = tmp_path / "in.txt"
+    src.write_text("\n".join(f"line {i}" for i in range(500)), encoding="utf-8")
+    out = tmp_path / "out.pdf"
+    result = autopage.fit_text(str(src), str(out), min_size=10, header=True)
+    assert result.pages > 1
+    text = _extract_text(out)
+    assert f"p. 1/{result.pages}" in text
+    assert f"p. 2/{result.pages}" in text
+
+
+def test_no_header_suppresses_the_whole_line(tmp_path):
+    src = tmp_path / "in.txt"
+    _write_with_fixed_mtime(src, "My Document Title\nbody line\n")
+    out = tmp_path / "out.pdf"
+    autopage.fit_text(str(src), str(out), header=False)
+    text = _extract_text(out)
+    assert "body line" in text  # body still rendered
+    assert "p. 1/" not in text
+    assert _DATE not in text
 
 
 if __name__ == "__main__":

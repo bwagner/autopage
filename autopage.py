@@ -22,6 +22,8 @@ Useful flags:
   --tabsize 8               (tab expansion width)
   --min-size 10             (minimum font size in pt; may produce >1 page)
   --max-size N              (cap font size in pt)
+  --number / -n             (number lines as G.N in the right gutter)
+  --no-header               (suppress the top-margin "title  p. N/M  mtime" line)
 """
 
 import argparse
@@ -44,9 +46,12 @@ MAX_LEADING_FACTOR = 1.5
 FONT_SIZE_SEARCH_MAX = 500
 RULE_LINE_RE = re.compile(r"^\s*-{3,}\s*$")
 RULE_LINE_WIDTH = 0.5
-DATE_FONT_SIZE = 6
+HEADER_FONT_SIZE = 6
+HEADER_TOP_PAD = 2
+HEADER_SEP = "  "
+PAGE_LABEL_FMT = "p. {page}/{total}"
+ELLIPSIS = "..."
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
-DATE_TOP_PAD = 2
 
 
 @dataclass(frozen=True)
@@ -124,6 +129,47 @@ def _extract_rules(lines):
     return text_lines, rule_positions
 
 
+def _title(lines):
+    """Return the document title: first non-blank, non-rule line, stripped.
+
+    Empty string when the input holds no such line.
+    """
+    for line in lines:
+        if RULE_LINE_RE.match(line) or line.strip() == "":
+            continue
+        return line.strip()
+    return ""
+
+
+def _truncate_to_width(text, font, size, max_width):
+    """Clip text to max_width, marking the cut with ELLIPSIS.
+
+    Returns text unchanged when it already fits, or "" when not even one
+    character plus the ellipsis does.
+    """
+    if stringWidth(text, font, size) <= max_width:
+        return text
+    for end in range(len(text) - 1, 0, -1):
+        candidate = text[:end] + ELLIPSIS
+        if stringWidth(candidate, font, size) <= max_width:
+            return candidate
+    return ""
+
+
+def _page_header(title, page, total, date_str, font, size, max_width):
+    """Build the top-margin header: ``<title>  p. N/M  <date>``.
+
+    Only the title is truncated to honour max_width; the page label and date
+    are never clipped. The title is dropped entirely when no part of it fits.
+    """
+    tail = HEADER_SEP.join((PAGE_LABEL_FMT.format(page=page, total=total), date_str))
+    if not title:
+        return tail
+    room = max_width - stringWidth(HEADER_SEP + tail, font, size)
+    shown = _truncate_to_width(title, font, size, room)
+    return shown + HEADER_SEP + tail if shown else tail
+
+
 def _max_font_size_by_width(lines, font, usable_width, max_size, gutter_label=""):
     lo, hi = 1, max_size or FONT_SIZE_SEARCH_MAX
     # Trailing space adds one-char padding between body text and gutter label.
@@ -169,11 +215,13 @@ def _render(
     max_leading,
     rule_positions=(),
     labels=None,
+    title="",
     date_str=None,
 ):
     top, right, bottom, left = margins
     pw, ph = page_size
     rule_x_end = pw - right
+    header_width = pw - left - right
     rule_set = set(rule_positions)
     ascent, descent = getAscentDescent(font, size)
     c = canvas.Canvas(output_path, pagesize=(pw, ph))
@@ -188,8 +236,19 @@ def _render(
         if date_str is not None:
             # Drawn in the top margin (well above body top at ph - top), so it
             # never enters layout calculations.
-            c.setFont(font, DATE_FONT_SIZE)
-            c.drawRightString(rule_x_end, ph - DATE_TOP_PAD - DATE_FONT_SIZE, date_str)
+            header = _page_header(
+                title,
+                page_idx + 1,
+                len(pages),
+                date_str,
+                font,
+                HEADER_FONT_SIZE,
+                header_width,
+            )
+            c.setFont(font, HEADER_FONT_SIZE)
+            c.drawRightString(
+                rule_x_end, ph - HEADER_TOP_PAD - HEADER_FONT_SIZE, header
+            )
         c.setFont(font, size)
         c.setLineWidth(RULE_LINE_WIDTH)
         if page_idx == 0 and -1 in rule_set:
@@ -226,7 +285,7 @@ def fit_text(
     max_leading=MAX_LEADING_FACTOR,
     number=False,
     start_group=1,
-    date=True,
+    header=True,
 ):
     top, right, bottom, left = margins
     pw, ph = PAPER[paper]
@@ -249,7 +308,7 @@ def fit_text(
     size, pages = _paginate(lines, width_size, uh, min_size)
     date_str = (
         time.strftime(DATE_FORMAT, time.localtime(os.path.getmtime(input_path)))
-        if date
+        if header
         else None
     )
     _render(
@@ -263,6 +322,7 @@ def fit_text(
         max_leading,
         rule_positions=rule_positions,
         labels=labels,
+        title=_title(lines),
         date_str=date_str,
     )
 
@@ -340,12 +400,13 @@ def main(argv=None):
         help="Group number to start at (default 1). Implies --number.",
     )
     ap.add_argument(
-        "--date",
+        "--header",
         default=True,
         action=argparse.BooleanOptionalAction,
-        dest="date",
-        help="Print the input file's mtime as YYYY-MM-DD HH:MM:SS in the top "
-        "margin (default on; --no-date suppresses).",
+        dest="header",
+        help="Print '<title>  p. N/M  YYYY-MM-DD HH:MM:SS' in the top margin, "
+        "where title is the first non-blank line and the date is the input "
+        "file's mtime (default on; --no-header suppresses).",
     )
     args = ap.parse_args(argv)
     if args.start_group is not None:
@@ -373,7 +434,7 @@ def main(argv=None):
         max_leading=args.max_leading,
         number=args.number,
         start_group=args.start_group,
-        date=args.date,
+        header=args.header,
     )
     top, right, bottom, left = result.margins
     orient = "landscape" if result.landscape else "portrait"

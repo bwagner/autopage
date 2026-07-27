@@ -20,6 +20,12 @@ Fit a `.txt` file onto the fewest PDF pages possible at the largest readable fon
   in the right gutter; the body font is shrunk just enough to reserve gutter
   space (sized for the widest label plus one character of padding), so labels
   never overlap the text.
+- **Page header**: every page carries a small right-aligned line in the top
+  margin: the document title (first non-blank, non-rule line of the source),
+  the page number as `p. N/M`, and the input file's mtime. Only the title is
+  truncated (with `...`) if the line would run past the left margin; the page
+  number and date are never clipped. Suppress the whole line with
+  `--no-header`. It is drawn above the body area, so it never affects layout.
 
 ## Usage
 
@@ -45,7 +51,7 @@ dependencies on first run.
 | `--max-leading F` | `1.5` | Max line spacing as multiple of font size |
 | `--number\|-n` | off | Number lines as `G.N` in the right gutter |
 | `--start-group\|-s N` | `1` | Group number to start at (implies `--number`) |
-| `--date` / `--no-date` | on | Print the input file's mtime as `YYYY-MM-DD HH:MM:SS` in the top margin (drawn outside the body, layout-neutral) |
+| `--header` / `--no-header` | on | Print `<title>  p. N/M  YYYY-MM-DD HH:MM:SS` in the top margin (drawn outside the body, layout-neutral) |
 
 ## Tests
 
