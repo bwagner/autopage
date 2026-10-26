@@ -5,7 +5,7 @@ description = "Fit a .txt onto the fewest PDF pages possible at the largest read
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Bernhard Wagner" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "reportlab",
     "pytest>=8.0",
