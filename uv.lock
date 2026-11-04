@@ -7,16 +7,22 @@ name = "autopage"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "pypdf" },
-    { name = "pytest" },
     { name = "reportlab" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pypdf" },
+    { name = "pytest" },
+]
+
 [package.metadata]
-requires-dist = [
+requires-dist = [{ name = "reportlab" }]
+
+[package.metadata.requires-dev]
+dev = [
     { name = "pypdf" },
     { name = "pytest", specifier = ">=8.0" },
-    { name = "reportlab" },
 ]
 
 [[package]]

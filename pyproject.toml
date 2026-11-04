@@ -8,6 +8,10 @@ authors = [{ name = "Bernhard Wagner" }]
 requires-python = ">=3.11"
 dependencies = [
     "reportlab",
+]
+
+[dependency-groups]
+dev = [
     "pytest>=8.0",
     "pypdf",
 ]
