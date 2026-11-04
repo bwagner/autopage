@@ -1,12 +1,3 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.10"
-# dependencies = [
-#     "pytest>=8.0",
-#     "reportlab",
-#     "pypdf",
-# ]
-# ///
 """Tests for autopage.py."""
 
 import sys
@@ -586,7 +577,3 @@ def test_short_flags_drive_the_same_options(tmp_path):
     )
     assert _extract_text(out_short) == _extract_text(out_long)
     assert "3.1" in _extract_text(out_short)  # -s 3 implied --number
-
-
-if __name__ == "__main__":
-    sys.exit(pytest.main([__file__, "-v"]))
